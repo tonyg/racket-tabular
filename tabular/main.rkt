@@ -1,7 +1,6 @@
 #lang racket/base
 
 ;; TODO: *lots* more tests
-;; TODO: pretty printing of tables
 
 (provide (except-out (struct-out table) table)
          (rename-out [make-table table] [table <table>])
@@ -65,7 +64,10 @@
          strings->table/rx
 
          csv-expr->table
-         table->csv-expr)
+         table->csv-expr
+
+         pretty-print-table
+         table->pretty-string)
 
 (require racket/dict)
 (require racket/format)
@@ -129,6 +131,9 @@
   #:transparent
   #:property prop:sequence
   (lambda (t) (in-table* t (table-column-names t)))
+  #:methods gen:custom-write
+  [(define (write-proc t port mode)
+     (write-string (table->pretty-string t) port))]
   #:methods gen:equal+hash
   [(define (equal-proc t1 t2 =?)
      (and (=? (table-header* t1) (table-header* t2))
@@ -672,14 +677,74 @@
       (cons col-names rows)
       rows))
 
+(define (pretty-print-table t [p (current-output-port)])
+  (define col-specs (table-columns t))
+
+  (define (value-width v)
+    (string-length (~a v)))
+
+  (define (column-width c)
+    (max (value-width (table-column-name c))
+         (if (table-column-aggregate? c)
+             (value-width (hash-ref (table-aggregates t) (table-column-name c) ""))
+             (let ((i (hash-ref (table-index t) (table-column-name c))))
+               (for/fold [(acc 0)] [(row (in-vector (table-body t)))]
+                 (max acc (value-width (vector-ref row i))))))))
+
+  (define widths (map column-width col-specs))
+
+  (define (centeralign v w)
+    (define s (~a v))
+    (define padding (max 0 (- w (string-length s))))
+    (define left-padding (arithmetic-shift padding -1))
+    (define right-padding (- padding left-padding))
+    (string-append (make-string left-padding #\space) s (make-string right-padding #\space)))
+
+  (define (leftalign v w)
+    (define s (~a v))
+    (string-append s (make-string (max 0 (- w (string-length s))) #\space)))
+
+  (define ((output align) v w)
+    (display (align v w) p))
+
+  (define (output-columns o vs)
+    (for/fold [(need-sep? #f)] [(v vs) (w widths)]
+      (when need-sep? (display " | " p))
+      (o v w)
+      #t)
+    (newline p))
+
+  (output-columns (output centeralign) (map table-column-name col-specs))
+  (displayln (make-string (+ (* 3 (- (length widths) 1)) (foldl + 0 widths)) #\-) p)
+
+  (define dep-index (make-dep-index t (map table-column-name col-specs)))
+  (for [(row (in-vector (table-body t)))]
+    (output-columns (output leftalign) (deref-dep-index row dep-index))))
+
+(define (table->pretty-string t)
+  (define p (open-output-string))
+  (pretty-print-table t p)
+  (get-output-string p))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (module+ test
+  (require (only-in racket/string string-join))
+
   (define my-table
     (make-table [timestamp    name            age president]
                 ["2016-01-01" "James McAvoy"  30  "Magneto"]
                 ["2016-01-02" "Matt Murdock"  35  "Stick"]
                 ["2016-01-03" "Shallan Davar" 20  "Stick"]))
+
+  (check-equal? (table->pretty-string my-table)
+                (string-join (list "timestamp  |     name      | age | president"
+                                   "--------------------------------------------"
+                                   "2016-01-01 | James McAvoy  | 30  | Magneto  "
+                                   "2016-01-02 | Matt Murdock  | 35  | Stick    "
+                                   "2016-01-03 | Shallan Davar | 20  | Stick    "
+                                   "")
+                             "\n"))
 
   (define world
     (make-table [name gdp pop area]
