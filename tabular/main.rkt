@@ -175,10 +175,10 @@
 (define (table-empty? t)
   (zero? (table-row-count t)))
 
-(define (table-row-ref t n)
+(define (table-row-ref n t)
   (vector-ref (table-body t) n))
 
-(define (table-column-ref t col-name)
+(define (table-column-ref col-name t)
   (define i (make-dep-index/aggregates 'table-column-ref t (list col-name)))
   (for/list [(row (in-vector (table-body t)))] (deref-dep-index-pos row (car i))))
 
@@ -307,7 +307,7 @@
     [(_ deps args [col-name combiner-fn-expr seed-expr])
      (table-column-aggregate 'col-name deps (lambda args seed-expr) combiner-fn-expr)]))
 
-(define (table-freeze-aggregate t col-name)
+(define (table-freeze-aggregate col-name t)
   (define c (findf (lambda (c) (and (table-column-aggregate? c)
                                     (eq? (table-column-name c) col-name)))
                    (table-columns t)))
@@ -320,7 +320,7 @@
          (for/vector [(row (in-vector (table-body t)))]
            (vector-append row vv))))
 
-(define (table-select** who t col-names)
+(define (table-select** who col-names t)
   (define new-col-specs (filter (lambda (c) (set-member? col-names (table-column-name c)))
                                 (table-columns t)))
   (when (not (= (set-count col-names) (length new-col-specs)))
@@ -345,17 +345,17 @@
            (for/vector [(old-row (in-vector (table-body t)))]
              (for/vector [(i dep-index)] (vector-ref old-row i))))))
 
-(define (table-select* t col-names)
-  (table-select** 'table-select* t col-names))
+(define (table-select* col-names t)
+  (table-select** 'table-select* col-names t))
 
-(define-syntax-rule (table-select table [col-name ...])
-  (table-select* table (set 'col-name ...)))
+(define-syntax-rule (table-select [col-name ...] table)
+  (table-select* (set 'col-name ...) table))
 
-(define (table-reject* t col-names)
-  (table-select** 'table-reject* t (set-subtract (table-column-names t) col-names)))
+(define (table-reject* col-names t)
+  (table-select** 'table-reject* (set-subtract (table-column-names t) col-names) t))
 
-(define-syntax-rule (table-reject table [col-name ...])
-  (table-reject* table (set 'col-name ...)))
+(define-syntax-rule (table-reject [col-name ...] table)
+  (table-reject* (set 'col-name ...) table))
 
 (define (table-filter* t deps pred)
   (recompute-aggregates
@@ -761,16 +761,16 @@
                                  ["Kamina City" 2000 9999 9999 (exact->inexact (/ 2000 9999))])))
     (check-equal? extended-world
                   (table-extend check-world [area] [total-area + area]))
-    (check-equal? (table-reject extended-world [total-area])
+    (check-equal? (table-reject [total-area] extended-world)
                   check-world))
 
-  (check-equal? (table-select my-table [name age])
+  (check-equal? (table-select [name age] my-table)
                 (make-table [name age]
                             ["James McAvoy"  30]
                             ["Matt Murdock"  35]
                             ["Shallan Davar" 20]))
 
-  (check-equal? (table-select my-table [name age])
+  (check-equal? (table-select [name age] my-table)
                 (make-table [age name]
                             [30  "James McAvoy"]
                             [35  "Matt Murdock"]
@@ -787,7 +787,7 @@
                             ["2016-01-01" "James McAvoy"  30  "Magneto"]
                             ["2016-01-03" "Shallan Davar" 20  "Stick"]))
 
-  (check-equal? (table-column-ref world 'name)
+  (check-equal? (table-column-ref 'name world)
                 (list "Atlantis" "Amestris" "Kamina City"))
 
   (define emp (make-table [last-name department-id]
