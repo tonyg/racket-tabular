@@ -73,6 +73,7 @@
 (require racket/format)
 (require racket/function)
 (require racket/match)
+(require racket/pretty)
 (require racket/set)
 (require racket/stream)
 (require racket/vector)
@@ -679,6 +680,37 @@
 
 (define (pretty-print-table t [p (current-output-port)])
   (define col-specs (table-columns t))
+  (define separator "|")
+  (define separator-width (string-length separator))
+  (define minimum-actual-allocation 8)
+
+  ;; Rescales the column widths to try to conform to the given width limit.
+  (define (scale-widths requested-widths total-width-limit)
+    (define numbered-reqs (for/list [(i (in-naturals)) (w requested-widths)] (list w i)))
+    (define sorted-reqs (sort numbered-reqs #:key car <))
+    (define-values (_total-request sorted-reqs+totals)
+      (let loop ((reqs sorted-reqs))
+        (match reqs
+          ['() (values 0 '())]
+          [(cons (list w i) reqs)
+           (define-values (total tail) (loop reqs))
+           (define next-total (+ total w separator-width))
+           (values next-total (cons (list w i next-total) tail))])))
+    (define scaled-reqs
+      (let loop ((reqs sorted-reqs+totals) (remaining-space total-width-limit))
+        (match reqs
+          ['() '()]
+          [(cons (list w i total) reqs)
+           (if (>= remaining-space total)
+               (cons (list w i)
+                     (loop reqs (- remaining-space w separator-width)))
+               (let ((allocation (if (< w minimum-actual-allocation)
+                                     w
+                                     (max minimum-actual-allocation
+                                          (floor (* w (/ remaining-space total)))))))
+                 (cons (list allocation i)
+                       (loop reqs (- remaining-space allocation separator-width)))))])))
+    (map car (sort scaled-reqs #:key cadr <)))
 
   (define (value-width v)
     (string-length (~a v)))
@@ -691,31 +723,45 @@
                (for/fold [(acc 0)] [(row (in-vector (table-body t)))]
                  (max acc (value-width (vector-ref row i))))))))
 
-  (define widths (map column-width col-specs))
+  (define widths (scale-widths (map column-width col-specs) (pretty-print-columns)))
+
+  (define (pad-or-truncate v w k)
+    (define s (~a v))
+    (define len (string-length s))
+    (define padding (- w len))
+    (if (negative? padding)
+        (string-append (substring s 0 (max 0 (- w 2))) "..")
+        (k s padding)))
 
   (define (centeralign v w)
-    (define s (~a v))
-    (define padding (max 0 (- w (string-length s))))
-    (define left-padding (arithmetic-shift padding -1))
-    (define right-padding (- padding left-padding))
-    (string-append (make-string left-padding #\space) s (make-string right-padding #\space)))
+    (pad-or-truncate
+     v w
+     (lambda (s padding)
+       (define left-padding (arithmetic-shift padding -1))
+       (define right-padding (- padding left-padding))
+       (string-append (make-string left-padding #\space) s (make-string right-padding #\space)))))
 
   (define (leftalign v w)
-    (define s (~a v))
-    (string-append s (make-string (max 0 (- w (string-length s))) #\space)))
+    (pad-or-truncate
+     v w
+     (lambda (s padding)
+       (string-append s (make-string (max 0 padding) #\space)))))
 
   (define ((output align) v w)
     (display (align v w) p))
 
   (define (output-columns o vs)
     (for/fold [(need-sep? #f)] [(v vs) (w widths)]
-      (when need-sep? (display " | " p))
+      (when need-sep? (display separator p))
       (o v w)
       #t)
     (newline p))
 
   (output-columns (output centeralign) (map table-column-name col-specs))
-  (displayln (make-string (+ (* 3 (- (length widths) 1)) (foldl + 0 widths)) #\-) p)
+  (displayln (make-string (+ (* separator-width (- (length widths) 1))
+                             (foldl + 0 widths))
+                          #\-)
+             p)
 
   (define dep-index (make-dep-index t (map table-column-name col-specs)))
   (for [(row (in-vector (table-body t)))]
@@ -738,11 +784,11 @@
                 ["2016-01-03" "Shallan Davar" 20  "Stick"]))
 
   (check-equal? (table->pretty-string my-table)
-                (string-join (list "timestamp  |     name      | age | president"
-                                   "--------------------------------------------"
-                                   "2016-01-01 | James McAvoy  | 30  | Magneto  "
-                                   "2016-01-02 | Matt Murdock  | 35  | Stick    "
-                                   "2016-01-03 | Shallan Davar | 20  | Stick    "
+                (string-join (list "timestamp |    name     |age|president"
+                                   "--------------------------------------"
+                                   "2016-01-01|James McAvoy |30 |Magneto  "
+                                   "2016-01-02|Matt Murdock |35 |Stick    "
+                                   "2016-01-03|Shallan Davar|20 |Stick    "
                                    "")
                              "\n"))
 
