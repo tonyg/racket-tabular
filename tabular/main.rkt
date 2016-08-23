@@ -712,43 +712,40 @@
                        (loop reqs (- remaining-space allocation separator-width)))))])))
     (map car (sort scaled-reqs #:key cadr <)))
 
-  (define (value-width v)
-    (string-length (~a v)))
-
   (define (column-width c)
-    (max (value-width (table-column-name c))
+    (max (string-length (~a (table-column-name c)))
          (if (table-column-aggregate? c)
-             (value-width (hash-ref (table-aggregates t) (table-column-name c) ""))
+             (string-length (~v (hash-ref (table-aggregates t) (table-column-name c) "")))
              (let ((i (hash-ref (table-index t) (table-column-name c))))
                (for/fold [(acc 0)] [(row (in-vector (table-body t)))]
-                 (max acc (value-width (vector-ref row i))))))))
+                 (max acc (string-length (~v (vector-ref row i)))))))))
 
   (define widths (scale-widths (map column-width col-specs) (pretty-print-columns)))
 
-  (define (pad-or-truncate v w k)
-    (define s (~a v))
+  (define (pad-or-truncate ->string v w k)
+    (define s (->string v))
     (define len (string-length s))
     (define padding (- w len))
     (if (negative? padding)
         (string-append (substring s 0 (max 0 (- w 2))) "..")
         (k s padding)))
 
-  (define (centeralign v w)
+  (define (centeralign ->string v w)
     (pad-or-truncate
-     v w
+     ->string v w
      (lambda (s padding)
        (define left-padding (arithmetic-shift padding -1))
        (define right-padding (- padding left-padding))
        (string-append (make-string left-padding #\space) s (make-string right-padding #\space)))))
 
-  (define (leftalign v w)
+  (define (leftalign ->string v w)
     (pad-or-truncate
-     v w
+     ->string v w
      (lambda (s padding)
        (string-append s (make-string (max 0 padding) #\space)))))
 
-  (define ((output align) v w)
-    (display (align v w) p))
+  (define ((output align ->string) v w)
+    (display (align ->string v w) p))
 
   (define (output-columns o vs)
     (for/fold [(need-sep? #f)] [(v vs) (w widths)]
@@ -757,7 +754,7 @@
       #t)
     (newline p))
 
-  (output-columns (output centeralign) (map table-column-name col-specs))
+  (output-columns (output centeralign ~a) (map table-column-name col-specs))
   (displayln (make-string (+ (* separator-width (- (length widths) 1))
                              (foldl + 0 widths))
                           #\-)
@@ -765,7 +762,7 @@
 
   (define dep-index (make-dep-index t (map table-column-name col-specs)))
   (for [(row (in-vector (table-body t)))]
-    (output-columns (output leftalign) (deref-dep-index row dep-index))))
+    (output-columns (output leftalign ~v) (deref-dep-index row dep-index))))
 
 (define (table->pretty-string t)
   (define p (open-output-string))
