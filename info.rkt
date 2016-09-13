@@ -1,5 +1,6 @@
 #lang setup/infotab
 (define collection 'multi)
 (define deps '("base"
-               "rackunit-lib"))
+               "rackunit-lib"
+               "data-lib"))
 ;; (define build-deps '("scribble-lib" "racket-doc"))
