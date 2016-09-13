@@ -781,11 +781,11 @@
                 ["2016-01-03" "Shallan Davar" 20  "Stick"]))
 
   (check-equal? (table->pretty-string my-table)
-                (string-join (list "timestamp |    name     |age|president"
-                                   "--------------------------------------"
-                                   "2016-01-01|James McAvoy |30 |Magneto  "
-                                   "2016-01-02|Matt Murdock |35 |Stick    "
-                                   "2016-01-03|Shallan Davar|20 |Stick    "
+                (string-join (list " timestamp  |     name      |age|president"
+                                   "------------------------------------------"
+                                   "\"2016-01-01\"|\"James McAvoy\" |30 |\"Magneto\""
+                                   "\"2016-01-02\"|\"Matt Murdock\" |35 |\"Stick\"  "
+                                   "\"2016-01-03\"|\"Shallan Davar\"|20 |\"Stick\"  "
                                    "")
                              "\n"))
 
