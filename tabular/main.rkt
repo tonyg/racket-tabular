@@ -79,7 +79,7 @@
 (require racket/vector)
 (require data/order)
 
-(module+ test (require rackunit))
+(module+ test (require rackunit) (provide (all-defined-out)))
 
 ;; A Table is a data structure having zero or more named columns.
 ;;
