@@ -30,7 +30,7 @@
        #f))
 
 (define (google-sheets-csv id #:sheet [sheet #f])
-  (define p (get-pure-port (google-sheets-csv-url id sheet)))
+  (define p (get-pure-port (google-sheets-csv-url id sheet) #:redirections 10))
   (define csv (parameterize ((current-input-port p)) (read-csv-file 'stdin)))
   (close-input-port p)
   csv)
